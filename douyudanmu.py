@@ -8,10 +8,28 @@ import socket
 import time
 import re
 import os
-
+import configparser
 from threading import Thread
 
-def room_info(room_id):
+
+def print_room_info(room_info):
+    room_status=room_info['data']['room_status']
+    room_id=room_info['data']['room_id']
+    cate_name=room_info['data']['cate_name']
+    room_name=room_info['data']['room_name']
+    owner_name=room_info['data']['owner_name']
+    online=room_info['data']['online']
+    fans_num=room_info['data']['fans_num']
+    if(room_status!='1'):
+        print('主播 '+str(owner_name)+' 未开播!',)
+    print('房间名:'+str(room_name),
+          '主播ID:'+str(owner_name),
+          '游戏分类:'+str(cate_name),
+          '在线人数:'+str(online),
+          '关注人数:'+str(fans_num))
+
+
+def connect_to_room(room_id):
     url='http://open.douyucdn.cn/api/RoomApi/room/'+str(room_id)
     headers={
             'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10=_12_5) AppleWebKit/603.2.4 (KHTML, like Gecko) Version/10.1.1 Safari/603.2.4'
@@ -19,37 +37,12 @@ def room_info(room_id):
     print('------------房间信息获取中----------',)
     r = requests.get(url,headers=headers)
     html=r.content.decode('utf-8')
-    roominfo=json.loads(html)
-    if(roominfo['error']!=0):
+    room_info=json.loads(html)
+    if(room_info['error']!=0):
         print('房间不存在!')
-        return 1
-    room_status=roominfo['data']['room_status']
-    if(room_status!='1'):
-        room_id=roominfo['data']['room_id']
-        cate_name=roominfo['data']['cate_name']
-        room_name=roominfo['data']['room_name']
-        owner_name=roominfo['data']['owner_name']
-        online=roominfo['data']['online']
-        fans_num=roominfo['data']['fans_num']
-        print('主播 '+str(owner_name)+' 未开播!',)
-        print('房间名:'+str(room_name),
-              '主播ID:'+str(owner_name),
-              '游戏分类:'+str(cate_name),
-              '在线人数:'+str(online),
-              '关注人数:'+str(fans_num))
-        return 1
-    else:
-        room_id=roominfo['data']['room_id']
-        cate_name=roominfo['data']['cate_name']
-        room_name=roominfo['data']['room_name']
-        owner_name=roominfo['data']['owner_name']
-        online=roominfo['data']['online']
-        fans_num=roominfo['data']['fans_num']
-        print('房间名:'+str(room_name),
-              '主播ID:'+str(owner_name),
-              '游戏分类:'+str(cate_name),
-              '在线人数:'+str(online),
-              '关注人数:'+str(fans_num))
+        return
+    print_room_info(room_info)
+    return room_info['data']['room_id']
 
 '''
     弹幕服务器地址  端口
@@ -74,10 +67,16 @@ def sendmsg(msgstr):
     client.send(msgHead)  #发送协议头
     client.send(msg)      #发送消息请求
 
+def start_keep_live_daemon():
+    t2 = Thread(target=keeplive)
+    t2.setDaemon(True)
+    t2.start()
+
 def connectdanmuserver(room_id):
-    d = os.path.dirname(__file__)# 获取当前文件路径
-    if(room_info(room_id)==1):
-         return 0
+
+    room_id = connect_to_room(room_id)
+    if not room_id:
+        return 0
     print('------------弹幕服务器连接中----------',)
     msg = 'type@=loginreq/roomid@={}/\x00'.format(room_id)
     sendmsg(msg)
@@ -88,7 +87,7 @@ def connectdanmuserver(room_id):
         data = client.recv(1024)  #这个data就是服务器向客户端发送的消息
         for nn, txt, level in pattern.findall(data):
             try:
-                print('[{}] [lv.{:>2s}] {:s}'.format(time.strftime("%Y-%m-%d %H:%M:%S"), level.decode(), txt.decode().strip()))
+                print('[{}] [lv.{:<2}] [{}]: {}'.format(time.strftime("%Y-%m-%d %H:%M:%S"), level.decode(), nn.decode(), txt.decode()))
             except:
                 pass
 
@@ -99,10 +98,22 @@ def keeplive():
         sendmsg(msg)
         time.sleep(10)
 
-if __name__ == '__main__':
+# 列出常看主播
+def list_favorite_options(config):
+    print('=========================================')
+    for room_id, person in config.items('favorite'):
+        print (room_id + ' = ' + person)
+    print('=========================================')
 
-    room_id = input('请输入房间号:')
+# 获取配置
+def get_config():
+    config = configparser.RawConfigParser()
+    config.read('config.ini')
+    return config
+
+if __name__ == '__main__':
+    config = get_config()
+    list_favorite_options(config)
+    room_id = input('请输入房间号或名称:')
     t1 = Thread(target=connectdanmuserver,args=(room_id,))
-    t2 = Thread(target=keeplive)
     t1.start()
-    t2.start()
