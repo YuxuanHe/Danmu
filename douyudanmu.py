@@ -67,17 +67,15 @@ def sendmsg(msgstr):
     client.send(msgHead)  #发送协议头
     client.send(msg)      #发送消息请求
 
-def start_keep_live_daemon():
-    t2 = Thread(target=keeplive)
-    t2.setDaemon(True)
-    t2.start()
+def chinese_count(data):
+    count = 0
+    for s in data:
+        if ord(s) > 127:
+            count += 1
+    return count
 
 def connectdanmuserver(room_id):
-
-    room_id = connect_to_room(room_id)
-    if not room_id:
-        return 0
-    print('------------弹幕服务器连接中----------',)
+    print('------------弹幕服务器连接中----------')
     msg = 'type@=loginreq/roomid@={}/\x00'.format(room_id)
     sendmsg(msg)
     join_room_msg = 'type@=joingroup/rid@={}/gid@=-9999/\x00'.format(room_id) #加入房间分组消息
@@ -87,10 +85,10 @@ def connectdanmuserver(room_id):
         data = client.recv(1024)  #这个data就是服务器向客户端发送的消息
         for nn, txt, level in pattern.findall(data):
             try:
-                print('[{}] [lv.{:<2}] [{}]: {}'.format(time.strftime("%Y-%m-%d %H:%M:%S"), level.decode(), nn.decode(), txt.decode()))
+                nick_name = '[{}]:'.format(nn.decode())
+                print('[{}] [lv.{}] {} {}'.format(time.strftime("%Y-%m-%d %H:%M:%S"), level.decode().rjust(2), nick_name.ljust(15-chinese_count(nick_name)), txt.decode()))
             except:
                 pass
-
 
 def keeplive():
     while True:
@@ -100,10 +98,10 @@ def keeplive():
 
 # 列出常看主播
 def list_favorite_options(config):
-    print('=========================================')
+    print('----------------------------------------')
     for room_id, person in config.items('favorite'):
-        print (room_id + ' = ' + person)
-    print('=========================================')
+        print ('{} = {}'.format(room_id.ljust(8), person))
+    print('----------------------------------------')
 
 # 获取配置
 def get_config():
@@ -114,6 +112,11 @@ def get_config():
 if __name__ == '__main__':
     config = get_config()
     list_favorite_options(config)
-    room_id = input('请输入房间号或名称:')
-    t1 = Thread(target=connectdanmuserver,args=(room_id,))
+    while True:
+        room_id = connect_to_room(input('请输入房间号或名称:'))
+        if room_id:
+            break
+    t1 = Thread(target=connectdanmuserver,args=(room_id, ))
     t1.start()
+    t2 = Thread(target=keeplive)
+    t2.start()
