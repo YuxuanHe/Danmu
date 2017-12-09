@@ -21,7 +21,7 @@ def print_room_info(room_info):
     online=room_info['data']['online']
     fans_num=room_info['data']['fans_num']
     if(room_status!='1'):
-        print('主播 '+str(owner_name)+' 未开播!',)
+        print('主播 '+str(owner_name)+' 未开播!')
     print('房间名:'+str(room_name),
           '主播ID:'+str(owner_name),
           '游戏分类:'+str(cate_name),
@@ -34,7 +34,7 @@ def connect_to_room(room_id):
     headers={
             'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10=_12_5) AppleWebKit/603.2.4 (KHTML, like Gecko) Version/10.1.1 Safari/603.2.4'
             }
-    print('------------房间信息获取中----------',)
+    print('------------房间信息获取中----------')
     r = requests.get(url,headers=headers)
     html=r.content.decode('utf-8')
     room_info=json.loads(html)
@@ -54,10 +54,12 @@ def connect_to_room(room_id):
     IP 地址：openbarrage.douyutv.com
     端口：8601
 '''
+
 client= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-Host='openbarrage.douyutv.com'
-Port=8601
-client.connect((Host,Port))
+client.settimeout(10.0)
+
+def connect():
+    client.connect(('openbarrage.douyutv.com',8601))
 
 def sendmsg(msgstr):
     msg=msgstr.encode('utf-8')
@@ -74,34 +76,46 @@ def chinese_count(data):
             count += 1
     return count
 
+def save_result(msg_text, file_path):
+    with open(file_path,'a') as f:
+        f.write(msg_text + ' ')
+
 def connectdanmuserver(room_id):
-    print('------------弹幕服务器连接中----------')
+    connect()
+    print('----------弹幕服务器连接中----------')
     msg = 'type@=loginreq/roomid@={}/\x00'.format(room_id)
     sendmsg(msg)
     join_room_msg = 'type@=joingroup/rid@={}/gid@=-9999/\x00'.format(room_id) #加入房间分组消息
     sendmsg(join_room_msg)
-    pattern = re.compile(b'type@=chatmsg/.+?/nn@=(.+?)/txt@=(.+?)/.+?/level@=(.+?)/')
+    chat_msg_pattern = re.compile(b'type@=chatmsg/.+?/nn@=(.+?)/txt@=(.+?)/.+?/level@=(.+?)/')
     while True:
-        data = client.recv(1024)  #这个data就是服务器向客户端发送的消息
-        for nn, txt, level in pattern.findall(data):
+        try:
+            data = client.recv(1024)  #这个data就是服务器向客户端发送的消息
+        except:
+            print('----------连接失败，重试中----------')
+            connectdanmuserver(room_id)
+            continue
+        for nn, txt, level in chat_msg_pattern.findall(data):
             try:
                 nick_name = '[{}]:'.format(nn.decode())
-                print('[{}] [lv.{}] {} {}'.format(time.strftime("%Y-%m-%d %H:%M:%S"), level.decode().rjust(2), nick_name.ljust(15-chinese_count(nick_name)), txt.decode()))
+                msg_text = txt.decode()
+                print('[{}] [lv.{}] {} {}'.format(time.strftime("%Y-%m-%d %H:%M:%S"), level.decode().rjust(2), nick_name.ljust(25-chinese_count(nick_name)), msg_text))
+                save_result(msg_text, room_id)
             except:
                 pass
 
 def keeplive():
     while True:
+        time.sleep(10)
         msg = 'type@=mrkl/\x00'
         sendmsg(msg)
-        time.sleep(10)
 
 # 列出常看主播
 def list_favorite_options(config):
-    print('----------------------------------------')
+    print('-----------常看主播列表------------')
     for room_id, person in config.items('favorite'):
         print ('{} = {}'.format(room_id.ljust(8), person))
-    print('----------------------------------------')
+    print('------------------------------------')
 
 # 获取配置
 def get_config():
